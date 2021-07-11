@@ -102,14 +102,14 @@ for i in range(0,len(dates)-1):
         DataLogger = pd.merge(esteeMap, DataLogger, how="right",on=["MappingNumber"])
         query = "select Creation_Date,Estee_ID as EsteeID,Buy_Sell_Indicator,Traded_Quantity,Traded_Price,Status,TradeTime  from vwalltrades where Status in ('Executed','Partially Filled') and Creation_Date='"+str(dates[i])+"' and ApplyTC=1"
         TradeDf = getValues(query, 1)
-        DataLogger.to_csv("DataLogger_"+date+".csv")
-        TradeDf.to_csv("TradeLogger_"+date+".csv")
+        DataLogger.to_csv("DataLogger/DataLogger_"+date+".csv")
+        TradeDf.to_csv("TradeLogger/TradeLogger_"+date+".csv")
     else:
         if(dataPath.is_file()):
             print("File Already Present : "+str(date))
 
-        DataLogger = pd.read_csv("DataLogger_"+date+".csv")
-        TradeDf = pd.read_csv("TradeLogger_"+date+".csv")
+        DataLogger = pd.read_csv("DataLogger/DataLogger_"+date+".csv")
+        TradeDf = pd.read_csv("TradeLogger/TradeLogger_"+date+".csv")
 
 
 
