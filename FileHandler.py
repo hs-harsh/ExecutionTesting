@@ -60,17 +60,20 @@ def get_esteeid_mapnum(file,base_dir="None",reverse=True):
 # path_to_zip_file = './Output/'
 # for f in files:
 #     # patoolib.extract_archive('./Output/'+f, outdir='./Output/Unzip')
-isDbEnable = False
+isDbEnable = True
 if(isDbEnable):
     base_dir = './Output/'
     files = listdir(base_dir)
     dates = list(set([file.split('.')[0] for file in files[:]]))
+    dates.sort()
+
     query ="select  EsteeID, UnderlyingTicker as Ticker from Strat_Security_Sector"
     secMapdf = getValues(query, 1)
     secMapdf.to_csv('SecMapping.csv')
 else:
     secMapdf = pd.read_csv('SecMapping.csv')
     dates=['20210517', '20210506', '20210518', '20210510', '20210519', '20210526', '20210503', '20210514', '20210525', '20210527', '20210512', '20210520', '20210511', '20210507', '20210528', '20210521', '20210505', '20210524', '20210513', '20210531', '20210504']
+    dates.sort()
 Case = 1
 
 TradeLots = pd.DataFrame(columns = ['Ticker','NetQty','Date'])
@@ -80,7 +83,8 @@ for i in range(0,len(dates)-1):
     dataPath = Path("DataLogger_"+date+".csv")
     if(date in ['20210520','20210507']):
         continue
-    if(isDbEnable and not dataPath.is_file()):
+    # and not dataPath.is_file()
+    if(isDbEnable ):
         esteeid_mapnum = get_esteeid_mapnum(date+".8382.DataMM_Log.txt0",base_dir,reverse=True)
         esteeMap = pd.DataFrame(esteeid_mapnum.items())
         esteeMap.columns = ['MappingNumber', 'EsteeID']
@@ -96,7 +100,7 @@ for i in range(0,len(dates)-1):
 
         esteeMap = esteeMap.astype({"MappingNumber": int})
         DataLogger = pd.merge(esteeMap, DataLogger, how="right",on=["MappingNumber"])
-        query = "select Creation_Date,Estee_ID as EsteeID,Buy_Sell_Indicator,Traded_Quantity,Traded_Price,Status,TradeTime  from vwalltrades where Status in ('Executed','Partially Filled') and Creation_Date='"+str(dates[i+1])+"' and ApplyTC=1"
+        query = "select Creation_Date,Estee_ID as EsteeID,Buy_Sell_Indicator,Traded_Quantity,Traded_Price,Status,TradeTime  from vwalltrades where Status in ('Executed','Partially Filled') and Creation_Date='"+str(dates[i])+"' and ApplyTC=1"
         TradeDf = getValues(query, 1)
         DataLogger.to_csv("DataLogger_"+date+".csv")
         TradeDf.to_csv("TradeLogger_"+date+".csv")
@@ -106,16 +110,6 @@ for i in range(0,len(dates)-1):
 
         DataLogger = pd.read_csv("DataLogger_"+date+".csv")
         TradeDf = pd.read_csv("TradeLogger_"+date+".csv")
-        
-    if(Case==1):
-        DataLogger['NetQty'] = (DataLogger[' AQ1'] +DataLogger[' BQ1'])/2 
-    DataLoggerSummary = DataLogger.groupby('Ticker', as_index=False).agg({
-            'NetQty':'mean',})
-    DataLoggerSummary['Date'] = date
-    TradeLots = pd.concat((TradeLots, DataLoggerSummary), axis=0)
-    
-    TradeDfSummary = TradeDf.groupby('EsteeID', as_index=False).agg({
-            'Traded_Quantity':'sum','Buy_Sell_Indicator':'mean'})
-    
+
 
 
