@@ -6,6 +6,7 @@ from os.path import isfile, join
 import patoolib
 from shutil import copy2
 import pyodbc
+from pathlib import Path
 
 def getValues(query, db):
     conn = 1
@@ -59,32 +60,53 @@ def get_esteeid_mapnum(file,base_dir="None",reverse=True):
 # path_to_zip_file = './Output/'
 # for f in files:
 #     # patoolib.extract_archive('./Output/'+f, outdir='./Output/Unzip')
-base_dir = './Output/'
-files = listdir(base_dir)
-dates = list(set([file.split('.')[0] for file in files[:4]]))
-query ="select  EsteeID, UnderlyingTicker as Ticker from Strat_Security_Sector"
-secMapdf = getValues(query, 1)
+isDbEnable = False
+if(isDbEnable):
+    base_dir = './Output/'
+    files = listdir(base_dir)
+    dates = list(set([file.split('.')[0] for file in files[:]]))
+    query ="select  EsteeID, UnderlyingTicker as Ticker from Strat_Security_Sector"
+    secMapdf = getValues(query, 1)
+    secMapdf.to_csv('SecMapping.csv')
+else:
+    secMapdf = pd.read_csv('SecMapping.csv')
+    dates=['20210517', '20210506', '20210518', '20210510', '20210519', '20210526', '20210503', '20210514', '20210525', '20210527', '20210512', '20210520', '20210511', '20210507', '20210528', '20210521', '20210505', '20210524', '20210513', '20210531', '20210504']
 Case = 1
 
 TradeLots = pd.DataFrame(columns = ['Ticker','NetQty','Date'])
 for i in range(0,len(dates)-1):
     date = dates[i]
     print(date)
-    esteeid_mapnum = get_esteeid_mapnum(date+".8382.DataMM_Log.txt0",base_dir,reverse=True)
-    esteeMap = pd.DataFrame(esteeid_mapnum.items())
-    esteeMap.columns = ['MappingNumber', 'EsteeID']
-    esteeMap = pd.merge(esteeMap, secMapdf, how="inner",on=["EsteeID"])
-
-    DataLogger = pd.read_csv(base_dir+date+".8382.DataLogger.txt0")
-    relcol = ['MappingNumber',' BP1', ' BP2', ' BP3',
-              ' AP1', ' AP2', ' AP3', ' BQ1', ' BQ2', ' BQ3', ' AQ1', ' AQ2', ' AQ3',' LTP',]
-    DataLogger = DataLogger[relcol]
-    priceCol = [' BP1', ' BP2', ' BP3',' AP1', ' AP2', ' AP3',' LTP',]
-    DataLogger[priceCol] = DataLogger[priceCol]/10000
-    DataLogger = DataLogger.astype({"MappingNumber": int})
-    esteeMap = esteeMap.astype({"MappingNumber": int})
-    DataLogger = pd.merge(esteeMap, DataLogger, how="right",on=["MappingNumber"])
+    dataPath = Path("DataLogger_"+date+".csv")
+    if(date in ['20210520','20210507']):
+        continue
+    if(isDbEnable and not dataPath.is_file()):
+        esteeid_mapnum = get_esteeid_mapnum(date+".8382.DataMM_Log.txt0",base_dir,reverse=True)
+        esteeMap = pd.DataFrame(esteeid_mapnum.items())
+        esteeMap.columns = ['MappingNumber', 'EsteeID']
+        esteeMap = pd.merge(esteeMap, secMapdf, how="inner",on=["EsteeID"])
     
+        DataLogger = pd.read_csv(base_dir+date+".8382.DataLogger.txt0")
+        relcol = ['MappingNumber',' CurrTimeInMicroSeconds',' BP1', ' BP2', ' BP3',
+                  ' AP1', ' AP2', ' AP3', ' BQ1', ' BQ2', ' BQ3', ' AQ1', ' AQ2', ' AQ3',' LTP',]
+        DataLogger = DataLogger[relcol]
+        priceCol = [' BP1', ' BP2', ' BP3',' AP1', ' AP2', ' AP3',' LTP',]
+        DataLogger = DataLogger.astype({"MappingNumber": int,' BP1': int, ' BP2': int, ' BP3': int,' AP1': int, ' AP2': int, ' AP3': int,' LTP': int})
+        DataLogger[priceCol] = DataLogger[priceCol]/10000
+
+        esteeMap = esteeMap.astype({"MappingNumber": int})
+        DataLogger = pd.merge(esteeMap, DataLogger, how="right",on=["MappingNumber"])
+        query = "select Creation_Date,Estee_ID as EsteeID,Buy_Sell_Indicator,Traded_Quantity,Traded_Price,Status,TradeTime  from vwalltrades where Status in ('Executed','Partially Filled') and Creation_Date='"+str(dates[i+1])+"' and ApplyTC=1"
+        TradeDf = getValues(query, 1)
+        DataLogger.to_csv("DataLogger_"+date+".csv")
+        TradeDf.to_csv("TradeLogger_"+date+".csv")
+    else:
+        if(dataPath.is_file()):
+            print("File Already Present : "+str(date))
+
+        DataLogger = pd.read_csv("DataLogger_"+date+".csv")
+        TradeDf = pd.read_csv("TradeLogger_"+date+".csv")
+        
     if(Case==1):
         DataLogger['NetQty'] = (DataLogger[' AQ1'] +DataLogger[' BQ1'])/2 
     DataLoggerSummary = DataLogger.groupby('Ticker', as_index=False).agg({
@@ -92,8 +114,6 @@ for i in range(0,len(dates)-1):
     DataLoggerSummary['Date'] = date
     TradeLots = pd.concat((TradeLots, DataLoggerSummary), axis=0)
     
-    query = "select Creation_Date,Estee_ID as EsteeID,Buy_Sell_Indicator,Traded_Quantity,Traded_Price,Status,TradeTime  from vwalltrades where Status in ('Executed','Partially Filled') and Creation_Date='"+str(dates[i+1])+"' and ApplyTC=1"
-    TradeDf = getValues(query, 1)
     TradeDfSummary = TradeDf.groupby('EsteeID', as_index=False).agg({
             'Traded_Quantity':'sum','Buy_Sell_Indicator':'mean'})
     
